@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <fstream>
+#include <omp.h>
 
 void softmax(size_t n, float *input) {
   float sum = 0.0;
@@ -60,6 +61,7 @@ void Layer::forwardBatch(size_t n, const std::vector<float> &input, std::vector<
   // output: n * out_features
   // output = input * transpose(weight) + bias
   output->resize(n * out_features_);
+#pragma omp parallel for
   for (size_t k = 0; k < n; ++k) {
     for (size_t i = 0; i < out_features_; ++i) {
       float sum = 0.0;
@@ -102,6 +104,7 @@ void MLP::classify(size_t n, const std::vector<float> &features, std::vector<int
   std::vector<float> output;
   forwardBatch(n, features, &output);
   classes->resize(n);
+#pragma omp parallel for
   for (size_t i = 0; i < n; ++i) {
     size_t idx = argmax(out_features_, output.data() + out_features_ * i);
     (*classes)[i] = idx;
