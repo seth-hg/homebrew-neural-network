@@ -8,3 +8,7 @@ add_compile_options(${OpenMP_CXX_FLAGS})
 
 add_executable(homebrew-neural-network src/main.cc src/mlp.cc)
 target_link_libraries(homebrew-neural-network ${OpenMP_CXX_LIBRARIES})
+
+if (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64")
+target_compile_options(homebrew-neural-network PRIVATE "-mavx2")
+endif ()

@@ -4,6 +4,11 @@
 #include <cmath>
 #include <fstream>
 #include <omp.h>
+#if __aarch64__
+#include <arm_neon.h>
+#elif __AVX2__
+#include <immintrin.h>
+#endif
 
 void softmax(size_t n, float *input) {
   float sum = 0.0;
@@ -64,9 +69,58 @@ void Layer::forwardBatch(size_t n, const std::vector<float> &input, std::vector<
 #pragma omp parallel for
   for (size_t k = 0; k < n; ++k) {
     for (size_t i = 0; i < out_features_; ++i) {
+      const float *x = input.data() + k * in_features_;
+      const float *y = weight_.data() + i * in_features_;
+      size_t j = in_features_;
       float sum = 0.0;
-      for (size_t j = 0; j < in_features_; ++j) {
-        sum += input[k * in_features_ + j] * weight_[i * in_features_ + j];
+#if __aarch64__
+      float buf[4] = {0, 0, 0, 0};
+      float32x4_t msum = vld1q_f32(buf); // initialize msum to <0,0,0,0>
+
+      while (j >= 4) {
+        float32x4_t mx = vld1q_f32(x);
+        float32x4_t my = vld1q_f32(y);
+        msum = vmlaq_f32(msum, mx, my);
+        x += 4;
+        y += 4;
+        j -= 4;
+      }
+
+      vst1q_f32(buf, msum);
+      sum = buf[0] + buf[1] + buf[2] + buf[3];
+#elif __AVX2__
+      __m256 msum1 = _mm256_setzero_ps();
+
+      while (j >= 8) {
+        __m256 mx = _mm256_loadu_ps(x);
+        __m256 my = _mm256_loadu_ps(y);
+        msum1 = _mm256_add_ps(msum1, _mm256_mul_ps(mx, my));
+        x += 8;
+        y += 8;
+        j -= 8;
+      }
+
+      __m128 msum2 = _mm256_extractf128_ps(msum1, 1);
+      msum2 = _mm_add_ps(msum2, _mm256_extractf128_ps(msum1, 0));
+
+      if (j >= 4) {
+        __m128 mx = _mm_loadu_ps(x);
+        __m128 my = _mm_loadu_ps(y);
+        msum2 = _mm_add_ps(msum2, _mm_mul_ps(mx, my));
+        x += 4;
+        y += 4;
+        j -= 4;
+      }
+
+      msum2 = _mm_hadd_ps(msum2, msum2);
+      msum2 = _mm_hadd_ps(msum2, msum2);
+      sum = _mm_cvtss_f32(msum2);
+#endif
+      while (j > 0) {
+        sum += (*x) * (*y);
+        x += 1;
+        y += 1;
+        j -= 1;
       }
       (*output)[k * out_features_ + i] = (sum + bias_[i]);
     }
