@@ -28,6 +28,8 @@ void printUsage(const char *cmd) {
   std::cout << cmd << usage << std::endl;
 }
 
+extern size_t argmax(size_t n, const float *values);
+
 int main(int argc, char **argv) {
   std::string model_path("../scripts/mnist_mlp.bin"), data_path("../data/MNIST/raw");
   if (!parseArgs(argc, argv, &model_path, &data_path) || model_path.empty() || data_path.empty()) {
@@ -48,11 +50,19 @@ int main(int argc, char **argv) {
   }
 
   Timer timer;
-  size_t correct = 0;
-  std::vector<int> classes;
+  std::vector<float> out(dataset.n_test() * 10);
   timer.start();
-  mlp.classify(dataset.n_test(), dataset.test_data(), &classes);
+  mlp.forwardBatch(dataset.n_test(), dataset.test_data(), &out);
   timer.stop();
+
+  size_t correct = 0;
+  std::vector<int> classes(dataset.n_test());
+#pragma omp parallel for
+  for (size_t i = 0; i < dataset.n_test(); ++i) {
+    size_t idx = argmax(10, out.data() + 10 * i);
+    classes[i] = idx;
+  }
+
   for (size_t i = 0; i < classes.size(); ++i) {
     size_t target = (size_t)dataset.test_label()[i];
     if (classes[i] == target) {

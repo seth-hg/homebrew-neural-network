@@ -45,5 +45,5 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    state_dict = torch.load(args.input)
-    save_model(state_dict, args.output)
+    state_dict = torch.load(args.i)
+    save_model(state_dict, args.o)
